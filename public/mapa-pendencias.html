@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mapa de Pendências — Ambiente Seguro MVP</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface2: #243044;
+      --text: #e8edf4;
+      --muted: #8b9cb3;
+      --done: #22c55e;
+      --partial: #eab308;
+      --pending: #ef4444;
+      --doc: #3b82f6;
+      --line: #334155;
+      --accent: #3b82f6;
+      --mvp: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+    header { padding: 1.25rem 2rem; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, #1a2332 0%, #0f1419 100%); position: sticky; top: 0; z-index: 100; }
+    header h1 { font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    header h1 span { color: var(--accent); }
+    .mvp-badge { display: inline-block; background: rgba(168,85,247,0.2); color: var(--mvp); border: 1px solid var(--mvp); border-radius: 6px; font-size: 0.7rem; font-weight: 800; padding: 0.15rem 0.5rem; letter-spacing: 0.08em; }
+    header p { color: var(--muted); font-size: 0.9rem; margin-top: 0.35rem; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-top: 1rem; }
+    .stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-right: auto; }
+    .stat { padding: 0.35rem 0.75rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; border: 1px solid var(--line); background: var(--surface); }
+    .stat.done { border-color: var(--done); color: var(--done); }
+    .stat.partial { border-color: var(--partial); color: var(--partial); }
+    .stat.pending { border-color: var(--pending); color: var(--pending); }
+    .filter-btn { padding: 0.4rem 0.9rem; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; font-size: 0.85rem; }
+    .filter-btn:hover, .filter-btn.active { border-color: var(--accent); background: var(--surface2); }
+    main { display: grid; grid-template-columns: 1fr 340px; min-height: calc(100vh - 130px); }
+    @media (max-width: 1100px) { main { grid-template-columns: 1fr; } .detail-panel { border-left: none !important; border-top: 1px solid var(--line); } }
+    .map-area { padding: 2rem; overflow: auto; }
+    .root-node { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; padding: 1rem 1.75rem; border-radius: 16px; font-weight: 800; text-align: center; margin-bottom: 1.5rem; cursor: pointer; max-width: 340px; margin-left: auto; margin-right: auto; }
+    .root-node small { display: block; font-weight: 500; font-size: 0.75rem; opacity: 0.85; margin-top: 0.2rem; }
+    .branches { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; max-width: 1400px; margin: 0 auto; }
+    .branch { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    .branch-header { padding: 0.85rem 1rem; font-weight: 700; display: flex; justify-content: space-between; cursor: pointer; border-bottom: 1px solid var(--line); }
+    .branch-body { padding: 0.5rem; }
+    .node { display: flex; gap: 0.5rem; padding: 0.55rem 0.65rem; border-radius: 8px; cursor: pointer; }
+    .node:hover, .node.selected { background: var(--surface2); }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 0.35rem; flex-shrink: 0; }
+    .status-dot.done { background: var(--done); }
+    .status-dot.partial { background: var(--partial); }
+    .status-dot.pending { background: var(--pending); }
+    .status-dot.doc { background: var(--doc); }
+    .node-title { font-size: 0.9rem; font-weight: 600; }
+    .node-sub { font-size: 0.75rem; color: var(--muted); }
+    .detail-panel { padding: 1.5rem; border-left: 1px solid var(--line); background: var(--surface); overflow-y: auto; }
+    .detail-panel h2 { font-size: 1.15rem; margin-bottom: 0.5rem; }
+    .detail-panel ul { margin: 0.75rem 0 0 1.1rem; font-size: 0.9rem; color: var(--muted); }
+    .detail-panel ul li { margin-bottom: 0.3rem; }
+    .detail-badge { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 6px; margin-bottom: 0.5rem; }
+    .detail-badge.done { background: rgba(34,197,94,0.2); color: var(--done); }
+    .detail-badge.partial { background: rgba(234,179,8,0.2); color: var(--partial); }
+    .detail-badge.pending { background: rgba(239,68,68,0.2); color: var(--pending); }
+    .ref { margin-top: 1rem; font-size: 0.8rem; color: var(--muted); font-family: monospace; }
+    .legend { display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem 2rem; border-top: 1px solid var(--line); font-size: 0.8rem; color: var(--muted); }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    a.home-link { color: var(--accent); margin-left: 1rem; font-size: 0.85rem; }
+    .section-note { font-size: 0.78rem; color: var(--muted); background: var(--surface2); border-radius: 6px; padding: 0.4rem 0.7rem; margin-top: 0.75rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔒 <span>Ambiente Seguro</span> — Mapa de Pendências <span class="mvp-badge">MVP v0.1</span></h1>
+    <p>Chat efêmero · US$ 5,99/mês plano premium · <a class="home-link" href="/">Abrir app</a> · <a class="home-link" href="/como-usar.html">Documentação</a></p>
+    <div class="toolbar">
+      <div class="stats" id="stats"></div>
+      <button class="filter-btn active" data-filter="all">Todos</button>
+      <button class="filter-btn" data-filter="done">Pronto</button>
+      <button class="filter-btn" data-filter="partial">Parcial</button>
+      <button class="filter-btn" data-filter="pending">Pendente</button>
+    </div>
+  </header>
+  <main>
+    <div class="map-area">
+      <div class="root-node" data-id="root">
+        Ambiente Seguro
+        <small>MVP · Chat efêmero por planos</small>
+      </div>
+      <div class="branches" id="branches"></div>
+    </div>
+    <aside class="detail-panel" id="detail">
+      <div class="empty-detail" style="color:var(--muted)">Clique em um item para ver detalhes.</div>
+    </aside>
+  </main>
+  <div class="legend">
+    <div class="legend-item"><span class="status-dot done"></span> Pronto</div>
+    <div class="legend-item"><span class="status-dot partial"></span> Parcial (funciona, mas incompleto)</div>
+    <div class="legend-item"><span class="status-dot pending"></span> Pendente (não implementado)</div>
+  </div>
+  <script>
+    const DATA = [
+      // ─────────────────────────────────────────────
+      // PLANOS E MONETIZAÇÃO
+      // ─────────────────────────────────────────────
+      {
+        id: "plans",
+        title: "Planos e Monetização",
+        icon: "💰",
+        items: [
+          {
+            id: "pl-free",
+            title: "Plano Free — regras na API",
+            status: "pending",
+            ref: "app/api/rooms/route.ts",
+            desc: "Free: 1 sala ativa, duração fixa 6h, skin WhatsApp apenas. A API precisa verificar plan='free' e forçar duration_hours=6.",
+            bullets: [
+              "Verificar se sessão já tem sala ativa antes de criar",
+              "Ignorar duration_hours enviado — sempre gravar 6",
+              "Retornar erro se tentar criar 2ª sala no free"
+            ]
+          },
+          {
+            id: "pl-premium",
+            title: "Plano Premium — regras na API",
+            status: "pending",
+            ref: "app/api/rooms/route.ts",
+            desc: "Premium (US$ 5,99/mês): múltiplas salas, duração 1h–24h escolhida pelo criador, todas as skins.",
+            bullets: [
+              "Validar duration_hours entre 1 e 24",
+              "Permitir múltiplas salas ativas por sessão",
+              "Verificar token/flag de premium na sessão"
+            ]
+          },
+          {
+            id: "pl-skin",
+            title: "Skin por plano no SkinPicker",
+            status: "partial",
+            ref: "components/SkinPicker.tsx",
+            desc: "Componente SkinPicker existe. Falta restringir opções por plano: free só vê WhatsApp; premium vê todas.",
+            bullets: [
+              "SkinPicker já existe e funciona",
+              "Falta receber prop 'plan' e filtrar opções",
+              "Skin salva em localStorage — não vai ao banco",
+              "Skin é da PESSOA, não da sala"
+            ]
+          },
+          {
+            id: "pl-payment",
+            title: "Integração de pagamento",
+            status: "pending",
+            ref: "—",
+            desc: "Gateway de pagamento para US$ 5,99/mês. Definir como identificar usuário premium (token, cookie, etc.).",
+            bullets: [
+              "MVP: pode ser validação manual ou chave simples",
+              "Pós-MVP: Stripe / LemonSqueezy / Paddle",
+              "Após pagamento: gravar flag premium no localStorage ou cookie"
+            ]
+          },
+          {
+            id: "pl-schema",
+            title: "Schema: colunas plan e duration_hours",
+            status: "done",
+            ref: "supabase/schema.sql",
+            desc: "Colunas plan ('free'|'premium') e duration_hours (1–24) adicionadas à tabela chat_rooms. Default: free + 6h.",
+            bullets: [
+              "plan: text check ('free','premium') default 'free'",
+              "duration_hours: integer check (1–24) default 6",
+              "expires_at calculado pelo Next.js com base em duration_hours"
+            ]
+          }
+        ]
+      },
+
+      // ─────────────────────────────────────────────
+      // EXPERIÊNCIA DO USUÁRIO
+      // ─────────────────────────────────────────────
+      {
+        id: "ux",
+        title: "Experiência do usuário",
+        icon: "👤",
+        items: [
+          {
+            id: "ux-home",
+            title: "Home — criar e entrar em sala",
+            status: "done",
+            ref: "app/page.tsx",
+            desc: "Sala aberta/privada e entrada por link ou ID.",
+            bullets: [
+              "Copia link/código ao criar privada",
+              "Aviso se Supabase não configurado",
+              "Ainda não mostra seletor de duração (premium)"
+            ]
+          },
+          {
+            id: "ux-duration",
+            title: "Seletor de duração na criação",
+            status: "pending",
+            ref: "app/page.tsx",
+            desc: "Free: mostrar '6h (fixo)' sem escolha. Premium: slider ou select de 1h–24h. Diferença visual clara entre planos.",
+            bullets: [
+              "Free: campo desabilitado mostrando 6h",
+              "Premium: input de 1 a 24 horas",
+              "Dependência: verificação de plano implementada"
+            ]
+          },
+          {
+            id: "ux-entry",
+            title: "Tela de entrada na sala",
+            status: "done",
+            ref: "app/room/[roomId]/page.tsx",
+            desc: "Nome, código (privada), fila de aprovação, SkinPicker.",
+            bullets: [
+              "Poll a cada 3s na fila",
+              "SkinPicker na entrada — skin é da pessoa"
+            ]
+          },
+          {
+            id: "ux-chat",
+            title: "Chat (mensagens e temas)",
+            status: "partial",
+            ref: "components/ChatRoom.tsx",
+            desc: "Texto, imagens, temas visuais. Funciona para MVP, mas skins não têm restrição de plano ainda.",
+            bullets: [
+              "Poll mensagens 3s (sem Realtime — suficiente para MVP)",
+              "Upload depende de BLOB_READ_WRITE_TOKEN",
+              "Skin por pessoa: salva em localStorage",
+              "Restrição de skin por plano: pendente"
+            ]
+          },
+          {
+            id: "ux-share",
+            title: "Compartilhar sala",
+            status: "partial",
+            ref: "components/ChatRoom.tsx",
+            desc: "Botão compartilhar no chat.",
+            bullets: [
+              "Código visível para criador em sala privada",
+              "Falta exibir duração restante no link de compartilhamento"
+            ]
+          },
+          {
+            id: "ux-expire",
+            title: "Expiração + countdown",
+            status: "done",
+            ref: "components/CountdownTimer.tsx",
+            desc: "Timer na sala até expires_at. Funciona para qualquer duração (6h free ou 1–24h premium).",
+            bullets: [
+              "API retorna 410 se expirada",
+              "Countdown funciona para qualquer valor de expires_at"
+            ]
+          }
+        ]
+      },
+
+      // ─────────────────────────────────────────────
+      // ACESSO E SEGURANÇA
+      // ─────────────────────────────────────────────
+      {
+        id: "access",
+        title: "Acesso e Segurança",
+        icon: "🛡️",
+        items: [
+          {
+            id: "acc-private",
+            title: "Sala privada + código 6 chars",
+            status: "done",
+            ref: "app/api/rooms/route.ts",
+            desc: "Código de 6 caracteres gerado na criação. Validação no join.",
+            bullets: ["Código aleatório, validação no endpoint join"]
+          },
+          {
+            id: "acc-approve",
+            title: "Aprovação pelo criador",
+            status: "done",
+            ref: "components/ApprovalPanel.tsx",
+            desc: "Pedidos pendentes exibidos no chat. Criador aprova/rejeita. Participante notificado em até 3s.",
+            bullets: ["Aprovar / rejeitar via PATCH /api/access-requests/[id]"]
+          },
+          {
+            id: "acc-session",
+            title: "Sessão anônima (localStorage)",
+            status: "done",
+            ref: "lib/session.ts",
+            desc: "UUID estável por navegador identifica o criador. Sem login, sem cadastro.",
+            bullets: [
+              "chat_session_id gravado no localStorage",
+              "Criador identificado por session_id"
+            ]
+          },
+          {
+            id: "acc-rls",
+            title: "RLS Supabase — permissiva no MVP",
+            status: "partial",
+            ref: "supabase/schema.sql",
+            desc: "Policies allow_all — toda validação de negócio é feita no Next.js. Aceitável para MVP.",
+            bullets: [
+              "Endurecer antes de escalar para produção pública",
+              "Opção: service_role key exclusivamente no servidor",
+              "Opção: validar via JWT do Supabase Auth"
+            ]
+          },
+          {
+            id: "acc-rate",
+            title: "Rate limiting (anti-spam)",
+            status: "pending",
+            ref: "—",
+            desc: "Sem limite de criação de salas por IP ou sessão. Risco de abuso em produção pública.",
+            bullets: [
+              "MVP: sem rate limiting — monitorar manualmente",
+              "Pós-MVP: Vercel Edge Middleware ou Upstash Redis"
+            ]
+          }
+        ]
+      },
+
+      // ─────────────────────────────────────────────
+      // BACKEND / SUPABASE
+      // ─────────────────────────────────────────────
+      {
+        id: "backend",
+        title: "Backend / Supabase",
+        icon: "🗄️",
+        items: [
+          {
+            id: "be-schema",
+            title: "Schema SQL — 3 tabelas",
+            status: "done",
+            ref: "supabase/schema.sql",
+            desc: "chat_rooms (+ plan + duration_hours), messages, access_requests. Índices, RLS, cascade delete.",
+            bullets: [
+              "Executar uma vez no SQL Editor do Supabase",
+              "Idempotente — pode reexecutar"
+            ]
+          },
+          {
+            id: "be-api-rooms",
+            title: "API salas (criar, ler, join)",
+            status: "partial",
+            ref: "app/api/rooms/",
+            desc: "CRUD de sala e fluxo de entrada funcionam. Falta validação de plano (free: 1 sala, 6h; premium: múltiplas, 1–24h).",
+            bullets: [
+              "Criar, ler e join: funcionam",
+              "Falta: verificar plan antes de criar",
+              "Falta: forçar duration_hours=6 para free"
+            ]
+          },
+          {
+            id: "be-api-msg",
+            title: "API mensagens",
+            status: "done",
+            ref: "app/api/messages/",
+            desc: "GET lista + POST nova mensagem. Polling 3s via SWR.",
+            bullets: []
+          },
+          {
+            id: "be-upload",
+            title: "Upload de imagens (Vercel Blob)",
+            status: "partial",
+            ref: "app/api/upload/route.ts",
+            desc: "Implementado, máx 4MB. Depende de BLOB_READ_WRITE_TOKEN configurado.",
+            bullets: [
+              "Funciona quando token está presente",
+              "Sem token: upload desabilitado graciosamente"
+            ]
+          },
+          {
+            id: "be-cron",
+            title: "pg_cron — limpeza automática",
+            status: "pending",
+            ref: "supabase/schema.sql (comentário)",
+            desc: "SQL está pronto e comentado no schema.sql. Precisa de ação manual no Supabase: habilitar extensão + executar schedule.",
+            bullets: [
+              "1. Supabase → Database → Extensions → habilitar pg_cron",
+              "2. Executar: select cron.schedule('limpar_salas_expiradas', '*/30 * * * *', $$ delete from public.chat_rooms where expires_at < now(); $$)",
+              "Delete em cascade apaga messages + access_requests",
+              "Sem pg_cron: banco acumula salas expiradas (não afeta funcionalidade, só espaço)"
+            ]
+          }
+        ]
+      },
+
+      // ─────────────────────────────────────────────
+      // GIT E DEPLOY
+      // ─────────────────────────────────────────────
+      {
+        id: "deploy",
+        title: "Git e Deploy (Vercel)",
+        icon: "🚀",
+        items: [
+          {
+            id: "dep-git",
+            title: "Repositório Git — não inicializado",
+            status: "pending",
+            ref: ".gitignore (existe)",
+            desc: "O .gitignore já existe mas o repositório Git não foi inicializado. Necessário para deploy na Vercel.",
+            bullets: [
+              "git init",
+              "git add .",
+              "git commit -m 'feat: initial MVP'",
+              "Criar repositório no GitHub/GitLab e fazer push"
+            ]
+          },
+          {
+            id: "dep-vercel",
+            title: "Projeto na Vercel",
+            status: "pending",
+            ref: "vercel.json (não existe)",
+            desc: "Sem vercel.json. O Next.js é detectado automaticamente pela Vercel — não é obrigatório criar o arquivo, mas o projeto precisa estar conectado.",
+            bullets: [
+              "vercel.com/new → importar repositório",
+              "Framework Preset: Next.js (detectado auto)",
+              "Configurar variáveis de ambiente na UI da Vercel"
+            ]
+          },
+          {
+            id: "dep-env",
+            title: "Variáveis de ambiente na Vercel",
+            status: "pending",
+            ref: ".env.local.example",
+            desc: "Três variáveis precisam ser configuradas no painel da Vercel antes do primeiro deploy.",
+            bullets: [
+              "NEXT_PUBLIC_SUPABASE_URL (obrigatório)",
+              "NEXT_PUBLIC_SUPABASE_ANON_KEY (obrigatório)",
+              "BLOB_READ_WRITE_TOKEN (opcional — imagens)",
+              "Configurar em: Vercel → Project → Settings → Environment Variables"
+            ]
+          },
+          {
+            id: "dep-nextconfig",
+            title: "Dois next.config — conflito potencial",
+            status: "partial",
+            ref: "next.config.ts / next.config.mjs",
+            desc: "Existem dois arquivos de config Next.js. O .mjs tem ignoreBuildErrors:true e images unoptimized (herança do v0). Consolidar em um único arquivo.",
+            bullets: [
+              "next.config.ts — configuração atual (remotePatterns Vercel Blob)",
+              "next.config.mjs — legado v0 com ignoreBuildErrors:true",
+              "Remover ou mesclar o .mjs no .ts antes do deploy"
+            ]
+          },
+          {
+            id: "dep-supabase-prod",
+            title: "Supabase de produção",
+            status: "pending",
+            ref: "supabase/schema.sql",
+            desc: "Criar projeto Supabase dedicado para produção (não usar projeto de dev). Aplicar schema.sql e ativar pg_cron.",
+            bullets: [
+              "Criar projeto em supabase.com",
+              "Executar supabase/schema.sql no SQL Editor",
+              "Ativar pg_cron para limpeza automática",
+              "Copiar URL + anon key para Vercel"
+            ]
+          }
+        ]
+      },
+
+      // ─────────────────────────────────────────────
+      // INFRAESTRUTURA
+      // ─────────────────────────────────────────────
+      {
+        id: "infra",
+        title: "Infraestrutura",
+        icon: "⚙️",
+        items: [
+          {
+            id: "inf-env",
+            title: "Variáveis .env.local (local)",
+            status: "partial",
+            ref: ".env.local.example",
+            desc: "Template existe. Precisa ser preenchido por máquina/ambiente. Nunca commitado (no .gitignore).",
+            bullets: [
+              "cp .env.local.example .env.local",
+              "Preencher SUPABASE_URL e ANON_KEY",
+              "Arquivo ignorado pelo git — correto"
+            ]
+          },
+          {
+            id: "inf-setup",
+            title: "Página /setup + teste de conexão",
+            status: "done",
+            ref: "app/setup/page.tsx",
+            desc: "Diagnostica conexão com Supabase. Testa se tabela chat_rooms é acessível.",
+            bullets: []
+          },
+          {
+            id: "inf-deps",
+            title: "Dependências (swr, @vercel/blob)",
+            status: "done",
+            ref: "package.json",
+            desc: "Todas as dependências necessárias estão no package.json.",
+            bullets: ["Rodar npm install após clonar"]
+          }
+        ]
+      },
+
+      // ─────────────────────────────────────────────
+      // PÓS-MVP (futuro)
+      // ─────────────────────────────────────────────
+      {
+        id: "future",
+        title: "Pós-MVP (roadmap)",
+        icon: "🔮",
+        items: [
+          {
+            id: "fu-realtime",
+            title: "Supabase Realtime (WebSocket)",
+            status: "pending",
+            ref: "—",
+            desc: "Substituir polling de 3s por push via WebSocket. Reduz carga no banco ~70% e melhora latência.",
+            bullets: ["Não bloqueia lançamento do MVP"]
+          },
+          {
+            id: "fu-e2e",
+            title: "Criptografia E2E",
+            status: "pending",
+            ref: "—",
+            desc: "Mensagens criptografadas antes de chegar ao banco. Não planejado no MVP.",
+            bullets: ["Não bloqueia lançamento do MVP"]
+          },
+          {
+            id: "fu-moreskins",
+            title: "Novas skins e temas",
+            status: "pending",
+            ref: "lib/themes/",
+            desc: "Arquitetura de temas já suporta novas skins. Adicionar novos temas sem mudar a estrutura.",
+            bullets: [
+              "Atualmente: WhatsApp, Slack, Telegram, Discord, Padrão",
+              "Novos temas: adicionar arquivo em lib/themes/"
+            ]
+          },
+          {
+            id: "fu-moretypes",
+            title: "Outros tipos de sala",
+            status: "pending",
+            ref: "—",
+            desc: "No futuro pode-se ter salas temáticas, salas com poll, salas com auto-moderação. MVP foca em chat simples.",
+            bullets: ["Não planejado para o MVP"]
+          },
+          {
+            id: "fu-deps-cleanup",
+            title: "Limpeza de dependências não usadas",
+            status: "pending",
+            ref: "package.json",
+            desc: "Pacotes herdados do v0 não utilizados (recharts, react-hook-form, embla-carousel etc.). Removê-los reduz bundle em ~200KB.",
+            bullets: ["Não bloqueia lançamento do MVP"]
+          }
+        ]
+      }
+    ];
+
+    const statusLabels = { done: "Pronto", partial: "Parcial", pending: "Pendente" };
+    let activeFilter = "all", selectedId = null;
+
+    function countStats() {
+      const all = DATA.flatMap(b => b.items);
+      return {
+        done:    all.filter(i => i.status === "done").length,
+        partial: all.filter(i => i.status === "partial").length,
+        pending: all.filter(i => i.status === "pending").length,
+        total:   all.length
+      };
+    }
+
+    function renderStats() {
+      const s = countStats();
+      document.getElementById("stats").innerHTML =
+        `<span class="stat done">${s.done} prontos</span>
+         <span class="stat partial">${s.partial} parciais</span>
+         <span class="stat pending">${s.pending} pendentes</span>
+         <span class="stat">${s.total} itens</span>`;
+    }
+
+    function renderBranches() {
+      document.getElementById("branches").innerHTML = DATA.map(branch => {
+        const visibleItems = activeFilter === "all"
+          ? branch.items
+          : branch.items.filter(i => i.status === activeFilter);
+        if (visibleItems.length === 0) return "";
+        return `
+        <div class="branch">
+          <div class="branch-header"><span>${branch.icon} ${branch.title}</span></div>
+          <div class="branch-body">
+            ${visibleItems.map(item => `
+              <div class="node" data-id="${item.id}" data-status="${item.status}">
+                <span class="status-dot ${item.status}"></span>
+                <div>
+                  <div class="node-title">${item.title}</div>
+                  <div class="node-sub">${statusLabels[item.status]}</div>
+                </div>
+              </div>`).join("")}
+          </div>
+        </div>`;
+      }).join("");
+      document.querySelectorAll(".node").forEach(n => n.addEventListener("click", () => selectNode(n.dataset.id)));
+    }
+
+    function findItem(id) {
+      for (const b of DATA) {
+        const item = b.items.find(i => i.id === id);
+        if (item) return { ...item, branch: b.title };
+      }
+      return null;
+    }
+
+    function selectNode(id) {
+      selectedId = id;
+      document.querySelectorAll(".node").forEach(n => n.classList.toggle("selected", n.dataset.id === id));
+      const item = findItem(id);
+      const panel = document.getElementById("detail");
+      if (!item) return;
+      panel.innerHTML = `
+        <span class="detail-badge ${item.status}">${statusLabels[item.status]}</span>
+        <h2>${item.title}</h2>
+        <p style="color:var(--muted);font-size:0.8rem;margin-bottom:0.5rem">${item.branch}</p>
+        <p style="font-size:0.9rem">${item.desc}</p>
+        ${item.bullets.length ? `<ul>${item.bullets.map(b => `<li>${b}</li>`).join("")}</ul>` : ""}
+        <div class="ref">📁 ${item.ref}</div>`;
+    }
+
+    document.querySelectorAll(".filter-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        activeFilter = btn.dataset.filter;
+        renderBranches();
+        if (selectedId) {
+          const node = document.querySelector(`[data-id="${selectedId}"]`);
+          if (!node) document.getElementById("detail").innerHTML = `<div style="color:var(--muted)">Clique em um item para ver detalhes.</div>`;
+        }
+      });
+    });
+
+    document.querySelector(".root-node").addEventListener("click", () => {
+      const s = countStats();
+      document.getElementById("detail").innerHTML = `
+        <h2>Visão geral — MVP v0.1</h2>
+        <p style="margin-top:0.75rem;font-size:0.9rem">Chat efêmero com salas temporárias. Dois planos:</p>
+        <ul style="margin-top:0.75rem;font-size:0.88rem;color:var(--muted)">
+          <li><strong style="color:var(--text)">Free:</strong> 1 sala, 6h fixas, skin WhatsApp</li>
+          <li><strong style="color:var(--text)">Premium US$5,99/mês:</strong> múltiplas salas, 1–24h, qualquer skin</li>
+        </ul>
+        <p style="margin-top:1rem;font-size:0.88rem;color:var(--muted)">Skin é da <strong style="color:var(--text)">pessoa</strong>, não da sala. Cada participante escolhe a sua.</p>
+        <ul style="margin-top:1rem;font-size:0.88rem">
+          <li><strong style="color:var(--done)">${s.done}</strong> prontos</li>
+          <li><strong style="color:var(--partial)">${s.partial}</strong> parciais</li>
+          <li><strong style="color:var(--pending)">${s.pending}</strong> pendentes</li>
+        </ul>
+        <div class="section-note" style="margin-top:1rem">
+          <strong>Bloqueadores de lançamento:</strong><br>
+          Git init → push → Vercel deploy → Supabase prod → pg_cron → Verificação de plano nas APIs
+        </div>`;
+    });
+
+    renderStats();
+    renderBranches();
+  </script>
+</body>
+</html>
