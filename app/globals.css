@@ -130,31 +130,20 @@
 }
 
 .chat-area--whatsapp {
-  position: relative;
   background-color: var(--bg-main);
-  isolation: isolate;
-}
-
-.chat-area--whatsapp::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: url('/skins/whatsapp-bg-dark.png');
+  background-image:
+    linear-gradient(rgb(229 221 213 / 0.92), rgb(229 221 213 / 0.92)),
+    url('/skins/whatsapp-bg-dark.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  opacity: 0.18;
+  background-attachment: fixed, fixed;
 }
 
-[data-mode='dark'] .chat-area--whatsapp::before {
-  opacity: 0.7;
-}
-
-.chat-area--whatsapp > * {
-  position: relative;
-  z-index: 1;
+[data-mode='dark'] .chat-area--whatsapp {
+  background-image:
+    linear-gradient(rgb(11 20 26 / 0.9), rgb(11 20 26 / 0.9)),
+    url('/skins/whatsapp-bg-dark.png');
 }
 
 .chat-area--teams {
