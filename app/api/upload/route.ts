@@ -1,4 +1,4 @@
-import { put } from '@vercel/blob'
+import { uploadChatImage } from '@/lib/supabase/storage'
 import { NextRequest, NextResponse } from 'next/server'
 
 const MAX_SIZE = 4 * 1024 * 1024
@@ -31,14 +31,13 @@ export async function POST(req: NextRequest) {
     }
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const filename = `chat/${Date.now()}-${safeName}`
+    const result = await uploadChatImage(file, safeName)
 
-    const blob = await put(filename, file, {
-      access: 'public',
-      addRandomSuffix: true,
-    })
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: 500 })
+    }
 
-    return NextResponse.json({ url: blob.url })
+    return NextResponse.json({ url: result.url })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro no upload'
     return NextResponse.json({ error: message }, { status: 500 })

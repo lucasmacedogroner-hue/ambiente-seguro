@@ -11,10 +11,12 @@ Banco de dados Postgres para o Ambiente Seguro. Três tabelas: `chat_rooms`, `me
 | 1 | **`00-reset.sql`** | Só se já existe banco antigo | Apaga tabelas, policies e job pg_cron do app — **zera tudo** |
 | 2 | **`schema.sql`** | ✅ Sim | Cria tabelas, índices e RLS do MVP |
 | 3 | **`pg-cron.sql`** | Recomendado em produção | Agenda limpeza de salas expiradas a cada 30 min |
+| 4 | **`storage.sql`** | Para upload de imagens | Cria bucket público `chat-images` (máx. 4MB) |
 
 ### Primeira vez (banco vazio)
 1. SQL Editor → executar **`schema.sql`**
 2. Habilitar extensão **pg_cron** → executar **`pg-cron.sql`**
+3. Executar **`storage.sql`** se quiser envio de imagens no chat
 
 ### Já rodou SQL antigo no Supabase (recomendado para evitar risco)
 1. **`00-reset.sql`** — limpa estrutura e dados antigos
